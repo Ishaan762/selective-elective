@@ -6,7 +6,18 @@ from . import models
 from . import helpers
 from django.db import connection
 
-# Create your views here.
+from django.db import connection
+from django.contrib import messages
+from django.contrib.auth import login, authenticate
+from django.shortcuts import render, redirect
+from django.contrib.auth.models import User
+
+from django.db import connection
+from django.contrib import messages
+from django.contrib.auth import login, authenticate
+from django.shortcuts import render, redirect
+from django.contrib.auth.models import User
+
 def home(request):
     if request.user.is_authenticated:
         return redirect('dashboard')
@@ -25,6 +36,8 @@ def home(request):
     else:
         return render(request, 'login.html', {})
 
+
+
 def dashboard(request):
     try:
         if request.user.is_authenticated:
@@ -35,7 +48,7 @@ def dashboard(request):
                 cursor.execute(f'''
                     select * from website_Student
                     where SRN='{request.user.username}'
-                ''')
+                    ''')
                 student_data = cursor.fetchone()
             student_data = models.Student.objects.get(SRN=request.user)
             context = {
@@ -91,6 +104,10 @@ def logout_user(request):
     messages.success(request, "You have been logged out")
     return redirect("home")
 
+from django.db import connection
+
+from django.db import connection
+
 def register_user(request):
     if request.method == 'POST':
         SRN = request.POST['SRN']
@@ -106,7 +123,7 @@ def register_user(request):
         
         try:
             GPA = float(GPA)
-        except:
+        except ValueError:
             messages.error(request, "Enter valid GPA")
             return redirect('register')
         
@@ -114,34 +131,43 @@ def register_user(request):
         for i in password:
             if not i.isalpha():
                 count_spec += 1
+        
         with connection.cursor() as cursor:
-            cursor.execute(f"select * from auth_user as u where u.username='{SRN}'")
-            user = cursor.fetchall()
-        if User.objects.filter(username=SRN).exists() or len(user) > 0:
-            messages.error(request, "User already exists")
-            return redirect('register')
-        elif password != c_password:
-            messages.error(request, "Passwords do not match")
-            return redirect('register')
-        elif len(password) < 8:
-            messages.error(request, "Password is too short")
-            return redirect('register')
-        elif count_spec < 2:
-            messages.error(request, "Add more special characters")
-            return redirect('register')
-        elif GPA > 10 or GPA < 0:
-            messages.error(request, "Enter valid GPA")
-            return redirect('register')
-        else:
-            messages.success(request, "Successfully signed up! Log in now")
-            user = User.objects.create_user(SRN, password=password)
-            student = models.Student(SRN=SRN, first_name=first_name, last_name=last_name, GPA=GPA)
-            user.save()
-            student.save()
-            print("Details saved!!!")
-            return redirect('home')
+            # Check if the user with the given SRN already exists
+            cursor.execute(f"SELECT * FROM auth_user WHERE username=%s", [SRN])
+            user = cursor.fetchone()
+
+            if user:
+                messages.error(request, "User already exists")
+                return redirect('register')
+            
+            if password != c_password:
+                messages.error(request, "Passwords do not match")
+                return redirect('register')
+            elif len(password) < 8:
+                messages.error(request, "Password is too short")
+                return redirect('register')
+            elif count_spec < 2:
+                messages.error(request, "Add more special characters")
+                return redirect('register')
+            elif GPA > 10 or GPA < 0:
+                messages.error(request, "Enter valid GPA")
+                return redirect('register')
+            else:
+                # Create a new user with the provided details, setting default values
+                user = User.objects.create_user(SRN, password=password)
+                user.save()
+                
+                cursor.execute("""
+                    INSERT INTO website_student (SRN, first_name, last_name, GPA, EF1_id, EF2_id)
+                    VALUES (%s, %s, %s, %s, NULL, NULL)
+                """, [SRN, first_name, last_name, GPA])
+                student=cursor.fetchall()
+                messages.success(request, "Successfully signed up! Log in now")
+                return redirect('home')
         
     return render(request, 'signup.html', {})
+
 
 def clear(request):
     if request.method == 'POST':
